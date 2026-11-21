@@ -1,37 +1,45 @@
-# Inkling 2 Mini on a 12 GB RTX 3060 (llama.cpp, Windows)
+# Inkling 2 Mini on a 12 GB RTX 3060
 
-Scripts and notes for running **Inkling 2 Mini** (Thinking Machines Lab's 26.4B-parameter MoE with 5.4B active, vision input, Apache 2.0) on a 12 GB RTX 3060 with llama.cpp on Windows. Includes a launcher, llama-bench scripts, a text speed check, and a small browser-use harness that drives a headless Chromium from screenshots.
+**Inkling 2 Mini** is Thinking Machines Lab's 26B mixture-of-experts model with vision input (Apache 2.0). Its model card recommends 32 GB or more of VRAM. This repo runs it on a **12 GB RTX 3060** with llama.cpp on Windows: a launcher, benchmark scripts, and a small browser-agent harness that drives a headless Chromium from screenshots.
 
-On my PC it decodes at **22-25 tok/s** and processes prompts at **300-500 tok/s**. In a small browser trial it completed **25 of 25 simple tasks** (53 of 53 scored steps correct) from screenshots alone, at a median of **7.3-9.6 s per step**.
+With the default Q4_K_XL setup on my PC:
+
+- **About 22 tok/s** decode and **about 300 tok/s** prompt processing.
+- **About 10 GB of VRAM** and **about 14 GB of system RAM**, with vision loaded and 16K context.
+- **Browser trial:** 5 easy tasks, each run 5 ways, with no wrong clicks. In the 3 pixel-only runs the model saw nothing but the screenshot and finished 15 of 15 tasks. Model time per step was a median of 7.3-9.6 s (8.9-12.4 s in a later clean-clone run on Windows).
+
+<p align="center"><img src="docs/browser-trial-shop.png" width="600" alt="The model looks at a shop page screenshot and clicks Add to cart under the cheapest blue mug, Sky Mug at $8.75, in one step"></p>
+
+**Why it fits:** the middle 12 layers (6-17) run three times per token, so the launcher gives *their* experts the VRAM and leaves the experts of the other 12 layers on the CPU. With the same number of expert layers on the CPU, that decoded about 20-35% faster than llama.cpp's usual `-ncmoe 12` split.
 
 > **These are early numbers from one PC**, measured on 2026-11-20 with the desktop in use, on one llama.cpp build that is still changing. See [About these numbers](#about-these-numbers) before you compare them with anything.
 
-The main trick is **loop-aware expert placement**. Inkling 2 Mini has 24 weight blocks, but layers 6-17 are a looped core that runs three times per token (48 layer visits). Their experts are worth three times as much GPU memory as the others, so the launcher keeps the experts of layers 6-17 on the GPU and puts the experts of layers 0-5 and 18-23 on the CPU.
+## Is this for you?
 
-## Contents
+- **Windows 11** x64 (tested). Windows 10 should work but is untested.
+- **An NVIDIA GPU with 12 GB** and a driver new enough for CUDA 13 (check with `nvidia-smi`, see [Step 2](#step-2-get-the-llamacpp-build)). Only one RTX 3060 12 GB is tested. If you try another 12 GB card, please post your numbers in an issue.
+- **RAM:** the Q4_K_XL server used about 14 GB of host RAM, the smaller IQ3_XXS about 2 GB less.
+- **Download:** about 19 GB for Q4_K_XL, or about 13 GB with IQ3_XXS instead (model, vision projector and the two llama.cpp zips).
+- **Runtime:** Unsloth's llama.cpp prebuilt b12568-mix-8eebad4, which has the looped-layer support this model needs. LM Studio, Ollama, Linux and Mac are not covered here. The `-ot` placement in the [recommended command](#the-recommended-command) is the part that should carry over to other llama.cpp builds with looped-layer support.
 
-| File | What it does |
-|---|---|
-| `run-inkling-mini.cmd` | Starts llama-server with the recommended settings (Q4_K_XL by default, `iq3` for the smaller quant). |
-| `config.cmd` | The model folder, llama.cpp folder and port. Edit it if your files live somewhere else. |
-| `verify-downloads.ps1` | Checks downloaded files against `SHA256SUMS` with `Get-FileHash`. |
-| `bench/bench.cmd` | llama-bench runs that reproduce the placement rows of the speed table. |
-| `bench/text_decode.py` | Sends two fixed text prompts to the running server and prints its decode speed. Standard library only. |
-| `browser/harness.py` | Browser-use trial: screenshot, then model, then one JSON action, then execute. Four local test pages plus one public Wikipedia task. |
-| `browser/summarize.py` | Turns harness runs into the results table. |
-| `browser/pages/` | The four local test pages (sign-in form, mug shop, settings, newsletter). |
+## Quick start
 
-## Requirements
+Four steps in PowerShell. Most of the time is the download: 19 GB takes about 25 minutes at 100 Mbit/s. On my connection (69-80 MB/s) the model and vision projector took under 5 minutes.
 
-- Windows 10 or 11, x64, with an NVIDIA GPU with 12 GB of VRAM. I have only tested one RTX 3060 12 GB (NVIDIA driver 610.88). The build used here is a CUDA 13 build, so the driver must support CUDA 13.
-- Host RAM: the Q4 server used about 14 GB of host RAM on my PC (64 GB total). Have at least that much free before you start it. If only about 10-14 GB is free, start the smaller model with `.\run-inkling-mini.cmd iq3` instead.
+1. [Get this repo](#step-1-get-this-repo).
+2. [Get the llama.cpp build](#step-2-get-the-llamacpp-build) (two zips) and check that it sees the GPU.
+3. [Download the model and the vision projector](#step-3-get-the-model-files), then verify their hashes.
+4. [Start the server](#step-4-start-the-server) with `.\run-inkling-mini.cmd`, then open http://127.0.0.1:8080 to chat with it or attach an image.
+
+Then, optionally, [check the speed](#step-5-check-text-speed), [run the browser trial](#step-6-run-the-browser-trial) and [reproduce the benchmarks](#step-7-optional-reproduce-the-llama-bench-rows).
+
+## Before you start
+
+- Every command below is for **PowerShell**. In PowerShell, always type `curl.exe`, not `curl` (in Windows PowerShell, `curl` is an alias for a different command). The `.cmd` scripts also run from a plain cmd window. If you work from WSL, read [Running from a WSL shell](#running-from-a-wsl-shell) first.
+- You need `git`, and Python 3.9 or newer from python.org for the speed check and the browser harness. `curl.exe` and `tar.exe` ship with Windows 10 and 11.
 - Disk: about 18.3 GB for the Q4_K_XL model plus the vision projector, 11.7 GB more for the optional IQ3_XXS model, about 0.7 GB for the two llama.cpp zips and 0.9 GB once they are unpacked (you can delete the zips afterwards), and a few hundred MB for the browser trial's Python packages and headless Chromium.
-- `git`, and Python 3.9 or newer from python.org (for the speed check and the browser harness).
-- `curl.exe` and `tar.exe`. Both ship with Windows 10 and 11.
-
-Every command below is for **PowerShell**. In PowerShell, always type `curl.exe`, not `curl` (in Windows PowerShell, `curl` is an alias for a different command). The `.cmd` scripts also run from a plain cmd window. If you work from WSL, read [Running from a WSL shell](#running-from-a-wsl-shell) first.
-
-After Step 1, every command runs from the repo folder. Commands that touch the model or llama.cpp folders use full paths, so you never need to `cd` away from the repo.
+- Free RAM: the launcher warns below 15,000 MB free (13,000 MB for IQ3). If only about 10-14 GB is free, start the smaller model with `.\run-inkling-mini.cmd iq3` instead of the default.
+- After Step 1, every command runs from the repo folder. Commands that touch the model or llama.cpp folders use full paths, so you never need to `cd` away from the repo.
 
 The commands use these default folders. You can use others; if you do, change the paths in the commands and in `config.cmd`.
 
@@ -56,6 +64,12 @@ If you clone into another folder, use that folder wherever this README says `C:\
 Use the Unsloth llama.cpp prebuilt **b12568-mix-8eebad4**, Windows x64, CUDA 13 (`cuda13-newer`, which covers the RTX 3060). It has the looped-layer support this model needs. The earlier Unsloth release b12540-mix-c4017f9 does not: it stops with `tensor 'blk.24.attn_q.weight' not found`.
 
 That zip has no CUDA runtime DLLs, so you also need `cudart-llama-bin-win-cuda-13.5-x64.zip` from upstream ggml-org llama.cpp release b12540.
+
+First check that your driver supports CUDA 13. The CUDA version in the header must be 13.0 or higher; with driver 610.88 the top line ends in `CUDA UMD Version: 13.3`:
+
+```powershell
+nvidia-smi
+```
 
 If you may already have this build, check first:
 
@@ -117,9 +131,11 @@ From the Hugging Face repo [unsloth/Inkling-2-Mini-GGUF](https://huggingface.co/
 | File | Bytes | sha256 | Needed? |
 |---|---|---|---|
 | `Inkling-2-Mini-UD-Q4_K_XL.gguf` | 17,629,759,456 | `e62d463c135ffe283df8d94b279a96ca145ac128b52ce854478613045bf4de15` | Yes (default model) |
-| `mmproj-F16.gguf` | 639,348,160 | `3bff75ffeb2d6e0371ba7bd42e30d26a7d98aea681fa44b03b5a20891cfa2c5f` | Yes (vision) |
+| `mmproj-F16.gguf` | 639,348,160 | `3bff75ffeb2d6e0371ba7bd42e30d26a7d98aea681fa44b03b5a20891cfa2c5f` | Yes (vision; the launcher always loads it) |
 | `Inkling-2-Mini-UD-IQ3_XXS.gguf` | 11,663,309,504 | `bd7ef0865adf119b5183e45e741c629bafa649769b33b5ebf689bb4bcc4690d6` | Optional (smaller, faster alternative, slightly lower accuracy) |
 | `dspark-Inkling-2-Mini-Q8_0.gguf` | 402,278,560 | `2ec78510da837e8fc3be54a14757a0c5fbd2d8d9e85a0d92853fafdf674f3773` | No (speculative draft; it did not help on this card) |
+
+If RAM is tight (see [Is this for you?](#is-this-for-you)), you can download the IQ3_XXS file instead of Q4_K_XL and always start the server with `iq3`.
 
 Verify first, to see what is already there. Files that are present get hashed (18-30 GB takes a few minutes); missing files show as `absent` at once:
 
@@ -175,7 +191,18 @@ curl.exe -s http://127.0.0.1:8080/health
 
 Expected: `{"status":"ok"}`
 
-The server is an OpenAI-compatible API at `http://127.0.0.1:8080/v1/chat/completions`, reachable only from this PC. For an agent loop, send `"temperature": 0` and `"chat_template_kwargs": {"reasoning_effort": "minimal"}`. The model's default effort is 0.9, which produces long reasoning. Even `minimal` still reasons for a while (70-110 tokens per browser step in my trial); the model card says `none` does too.
+### Your first reply
+
+The easiest way to see it work: open **http://127.0.0.1:8080** in your browser. That is llama-server's built-in chat page, where you can type a message or attach an image.
+
+Or ask from PowerShell (the answer takes a few seconds, because the model reasons first):
+
+```powershell
+$body = '{"messages":[{"role":"user","content":"In one sentence, what is a mixture-of-experts model?"}],"max_tokens":512,"temperature":0,"chat_template_kwargs":{"reasoning_effort":"minimal"}}'
+(Invoke-RestMethod http://127.0.0.1:8080/v1/chat/completions -Method Post -ContentType application/json -Body $body).choices[0].message.content
+```
+
+The server is an OpenAI-compatible API at `http://127.0.0.1:8080/v1/chat/completions`, reachable only from this PC. For an agent loop, send `"temperature": 0` and `"chat_template_kwargs": {"reasoning_effort": "minimal"}`. The model's default effort is 0.9, which produces long reasoning. Even `minimal` still reasons for a while (a mean of 81-111 generated tokens per browser step in my trial, most of it reasoning); the model card says `none` does too.
 
 ### The recommended command
 
@@ -187,18 +214,18 @@ C:\models\llama.cpp\b12568-mix-8eebad4-win-cuda13\llama-server.exe -m C:\models\
 
 | Flag | Why |
 |---|---|
-| `-ngl 99 -ot "blk\.([0-5]\|1[89]\|2[0-3])\.ffn_.*_exps=CPU"` | Everything on the GPU except the experts of layers 0-5 and 18-23. Do not let automatic fitting choose: on my first run `-fit` filled VRAM to 11.8 GB, spilled, and produced 1 token in 2 minutes. |
+| `-ngl 99 -ot "blk\.([0-5]\|1[89]\|2[0-3])\.ffn_.*_exps=CPU"` | Everything on the GPU except the experts of layers 0-5 and 18-23. Do not let automatic fitting choose: on my first run (IQ3_XXS) `-fit` filled VRAM to 11.8 GB, spilled, and produced 1 token in 2 minutes. |
 | `-fa on -c 16384 -ub 256` | 16K context. Op offload (on by default) needs a compute buffer; `llama-fit-params` projected about 1.8 GB for it at 16K with ub 512 and about 1.0 GB with ub 256, so ub 256 is the safe setting. |
 | `--cache-ram 0` | See [Memory](#memory-two-defaults-this-command-overrides). |
 | mmap left on (no `-lm none`) | See [Memory](#memory-two-defaults-this-command-overrides). |
 | `--spec-type none` | The DSpark draft model did not help on this card. |
 | `--temp 1.0 --top-p 1.0 --top-k 0 --min-p 0.0` | Server defaults for chat; an agent loop sends its own `temperature`. |
 
-What to expect on a 3060 (my PC): about 22 tok/s decode, about 300 tok/s prefill, 8-10 s per browser step (about 8 s with screenshots scaled to 0.75). It uses about 10 GB of the GPU, about 11.6 GB peak for the whole card with the desktop's share, and about 14 GB of host RAM.
+What to expect on a 3060 (my PC): about 22 tok/s decode, about 300 tok/s prefill, 8-10 s of model time per browser step (about 8 s with screenshots scaled to 0.75). It uses about 10 GB of the GPU, about 11.6 GB peak for the whole card with the desktop's share, and about 14 GB of host RAM.
 
-**IQ3_XXS, the faster alternative** (`iq3`): Q4_K_XL is the default because it is the more accurate quant. IQ3_XXS is about 8% faster at decode, about 1 s faster per browser step, and uses about 0.9-1.9 GB less VRAM and about 2 GB less host RAM, so pick it when the GPU is busy with other apps, when RAM is short, or for the snappiest loop. The trade-off is accuracy: Unsloth's own measurement puts Q4_K_XL at 98.0% same top token as Q8 and IQ3_XXS at 94.7%. On my easy browser tasks both scored 100%, so the gap did not show there, but harder tasks may expose it.
+**IQ3_XXS, the faster alternative** (`iq3`): Q4_K_XL is the default because it is the more accurate quant. IQ3_XXS is about 6-7% faster at decode, 1-2 s faster per browser step, and uses about 0.9-1.9 GB less VRAM and about 2 GB less host RAM, so pick it when the GPU is busy with other apps, when RAM is short, or for the snappiest loop. The trade-off is accuracy: in Unsloth's own measurement against their UD-Q8_K_XL quant, Q4_K_XL picks the same top token 98.0% of the time and IQ3_XXS 94.7%. On my easy browser tasks both scored 100%, so the gap did not show there, but harder tasks may expose it.
 
-If Windows has plenty of RAM to spare, adding `-lm none` gives +25-48% prefill (`$env:INKLING_EXTRA_ARGS = "-lm none"` before starting the launcher). Read the Memory section first.
+If Windows has plenty of RAM to spare, adding `-lm none` gave +25-48% prefill in llama-bench (pp512) (`$env:INKLING_EXTRA_ARGS = "-lm none"` before starting the launcher). Read the Memory section first.
 
 ## Step 5: Check text speed
 
@@ -216,7 +243,10 @@ It sends two fixed prompts (400 tokens each, reasoning effort `none`, temperatur
 {"prompt": 1, "prompt_tokens": 40, "prompt_tok_s": 39.7, "gen_tokens": 400, "gen_tok_s": 22.92, "wall_s": 18.5}
 ```
 
-`gen_tok_s` is the decode speed. On my PC the Q4_K_XL server read 22.92 and 22.55 tok/s for the two prompts (that run used `-lm none`; in llama-bench, mmap changed Q4 decode only from 22.98 to 22.52 tok/s). With `iq3`, it read 24.29 and 23.70.
+`gen_tok_s` is the decode speed. On my PC:
+
+- Q4_K_XL read 22.92 and 22.55 tok/s for the two prompts, and IQ3_XXS read 24.29 and 23.70. Those servers ran with `-lm none`.
+- With the default command (mmap), the only server reading is from the clean-clone test: IQ3_XXS read 22.01 and 21.89. So expect your default run to read a little below the `-lm none` numbers. (In llama-bench, mmap changed Q4 decode only from 22.98 to 22.52 tok/s.)
 
 ## Step 6: Run the browser trial
 
@@ -252,12 +282,13 @@ The `wiki` task opens the public en.wikipedia.org main page (read-only). To stay
 
 ### How the trial works
 
-- Viewport 1280x800, JPEG screenshots. The model sees only the screenshot, the task, and its own previous actions. It replies with one JSON action: click, type, key, scroll or done.
-- `coords` mode: the model picks pixel coordinates (pure visual grounding).
-- `som` mode: interactive elements get red numbered boxes, and the model also gets a list of them (the common browser-agent style).
+- Viewport 1280x800, JPEG screenshots. The model sees the screenshot, the task, and its own previous actions. It replies with one JSON action: click, type, key, scroll or done.
+- `coords` mode: the model picks pixel coordinates from the screenshot alone (pure visual grounding).
+- `som` mode: interactive elements get red numbered boxes, and the model also gets a text list of them (the common browser-agent style).
 - Tasks: sign in with a given username and password; add the cheapest blue mug to the cart; open Settings, turn on Dark mode and save; subscribe to a newsletter with an email and the weekly option; on live Wikipedia, search for and open the Ada Lovelace article.
 - Scoring: a step is correct if the clicked element is an acceptable next target, checked against the page's DOM. Wikipedia steps are scored only on task success.
 - Settings: temperature 0, `reasoning_effort` minimal.
+- Timing: the step times below are the model request (screenshot prefill plus generation). Taking the screenshot and performing the action add a little on top.
 
 ## Step 7 (optional): Reproduce the llama-bench rows
 
@@ -278,13 +309,32 @@ This is the recommended setup (core 6-17 experts on the GPU, op offload on, mmap
 Other modes:
 - `.\bench\bench.cmd iq3` is the same for IQ3_XXS.
 - RAM in quick mode: llama-bench maps the model file (mmap) and holds it in memory while it runs. In one IQ3_XXS run on my PC, with the desktop in use, Windows available memory fell to about 3.7 GB during the quick bench. The script prints a warning (it does not stop) when free RAM is under 22,000 MB for Q4 or 16,000 MB for IQ3; close heavy apps first if you are near the limit.
-- `.\bench\bench.cmd q4 placement` (or `iq3 placement`) runs three no-mmap rows: `-ncmoe 12` against core 6-17, with op offload off and on. These pin the CPU-side experts in RAM (peak private RAM was 14,900-14,955 MiB for IQ3_XXS and 20,538-20,587 MiB for Q4_K_XL on my PC), so the script refuses to start unless about 19,000 MB (IQ3) or 25,000 MB (Q4) of RAM is free.
+- `.\bench\bench.cmd q4 placement` (or `iq3 placement`) runs three no-mmap rows: `-ncmoe 12` against core 6-17, with op offload off and on. These pin the CPU-side experts in RAM (peak private RAM in those rows was 14,900-14,955 MiB for IQ3_XXS and 20,538-20,587 MiB for Q4_K_XL on my PC), so the script refuses to start unless about 19,000 MB (IQ3) or 25,000 MB (Q4) of RAM is free.
 
 The full llama-bench log of each run goes to `bench\logs\`, and the script exits non-zero if llama-bench fails. The VRAM and RAM peaks in the tables below came from a separate sampler that is not included here; watch Task Manager if you want them.
 
 ## Results
 
-### Speed: expert placement, quant and op offload
+### At a glance
+
+llama-bench, `-fa on -ngl 99`, core 6-17 experts on the GPU, op offload on, 3 repetitions, short context. Peak GPU is for the whole card, including the desktop's share.
+
+| Setup | Decode tg128 tok/s | Prompt pp512 tok/s | Peak GPU MiB |
+|---|---|---|---|
+| **Q4_K_XL, default command (mmap)** | **22.52** | **305.9** (pp2048 327.8) | 10,001 |
+| IQ3_XXS, `iq3` (mmap) | 23.88 | 399.4 (pp2048 384.2) | 8,068 |
+| Q4_K_XL, `-lm none` | 22.98 | 452.6 | 9,826 |
+| IQ3_XXS, `-lm none` | 24.63 | 496.6 | 8,825 |
+
+Expert placement is what makes 12 GB work. With the same 12 layers' experts on the CPU, keeping the looped core on the GPU instead of using `-ncmoe 12` (op offload off, no mmap, in both cases):
+
+| Quant | `-ncmoe 12` tg / pp512 | Core 6-17 on GPU tg / pp512 | Difference |
+|---|---|---|---|
+| IQ3_XXS | 18.25 / 106.6 | 24.55 / 181.2 | +34.5% decode, +70.0% prefill |
+| Q4_K_XL | 18.65 / 66.9 | 22.31 / 130.2 | +19.6% decode, +94.6% prefill, 1.9 GB less VRAM |
+
+<details>
+<summary><b>Full placement, quant and op offload table</b> (16 rows)</summary>
 
 llama-bench, `-fa on -ngl 99`, 3 repetitions, pp512 / tg128, short context. "Core 6-17" is the `-ot` pattern above. "po" is op offload (the GPU computes large prompt batches using the CPU-resident experts; on by default, `-nopo 1` turns it off). "lm none" means `-lm none` (no mmap). Peak GPU MiB is for the whole card, including the desktop's share. Private RAM is the peak private bytes of the llama process.
 
@@ -309,7 +359,9 @@ llama-bench, `-fa on -ngl 99`, 3 repetitions, pp512 / tg128, short context. "Cor
 
 The mmap rows are the recommended command's setup.
 
-### Speed: context depth (core 6-17, 1-2 repetitions, lm none)
+</details>
+
+### Context depth (core 6-17, 1-2 repetitions, lm none)
 
 | Quant | po | Depth | pp512 tok/s | tg128 tok/s | Peak GPU MiB |
 |---|---|---|---|---|---|
@@ -320,9 +372,34 @@ The mmap rows are the recommended command's setup.
 | IQ3_XXS | on | 8,192 | 382.0 | 23.36 | 11,905 |
 | IQ3_XXS | on | 32,768 | 249.8 | 21.25 | 11,905 |
 
-Decode falls only 10-15% from short context to 32K. At 32K with op offload the card is full (11.9 GB), and Q4 prefill drops to 96 tok/s, which is probably spill into shared memory (not confirmed). **16K is the practical context today.** 32K should become workable once a prebuilt includes Unsloth's relative-bias attention memory fixes (unslothai/llama.cpp #385/#386), which were merged after this build was cut.
+Decode falls only 10-15% from short context to 32K. At 32K with op offload the card is full (11.9 GB), and Q4 prefill drops to 96 tok/s, which is probably spill into shared memory (not confirmed). **16K is the practical context today.** 32K may become workable once a prebuilt includes Unsloth's relative-bias attention memory fixes (unslothai/llama.cpp #385/#386), which were merged after this build was cut; that needs a re-run to confirm.
+
+### Browser trial
+
+Server as in the recommended command, except that every row other than the `--cache-ram 0` row ran with llama-server's default `--cache-ram` (8,192 MiB). Times are the model request per step (screenshot prefill plus generation).
+
+| Run | Tasks | Scored steps correct | Steps | Median / mean / p90 step s | Prompt tok (mean) | Prompt ms | Gen tok | Gen ms |
+|---|---|---|---|---|---|---|---|---|
+| Q4 coords | 5/5 | 11/11 | 14 | 9.6 / 10.2 / 12.0 | 719 | 5,074 | 111 | 5,032 |
+| Q4 som | 5/5 | 10/10 | 12 | 8.6 / 10.0 / 12.3 | 857 | 5,734 | 88 | 4,069 |
+| Q4 coords, screenshot scaled to 960x600 | 5/5 | 11/11 | 14 | 7.9 / 8.6 / 9.6 | 439 | 3,400 | 111 | 5,047 |
+| Q4 coords, `--cache-ram 0` (4 tasks) | 4/4 | 10/10 | 13 | 9.6 / 10.4 / 12.1 | 723 | 5,316 | 108 | 5,018 |
+| IQ3 coords | 5/5 | 11/11 | 14 | 7.8 / 8.6 / 10.4 | 719 | 3,967 | 104 | 4,486 |
+| IQ3 som | 5/5 | 10/10 | 12 | 7.3 / 7.9 / 9.7 | 867 | 4,294 | 81 | 3,460 |
+
+Clean-clone check, later, on Windows with this repo's own harness and the default (mmap, `--cache-ram 0`) server, IQ3_XXS, the four local pages: coords 4/4 tasks and 10/10 steps at a median of 12.4 s; som 4/4 and 10/10 at 8.9 s.
+
+- **Accuracy:** no wrong clicks. Pixel grounding was accurate even for small targets: a 13 px checkbox, a radio button, and the "Add to cart" button under the right mug. On live Wikipedia it typed into the search box and then clicked the right autocomplete entry.
+- **Waste:** it sometimes spends a step clicking a field before typing into it, even though `type` clicks and types at once. The newsletter task took 4 steps where 3 were enough.
+- **Latency:** about 45% of a step is the screenshot prefill (700-880 tokens at 1280x800, about 4-5 s) and about 50% is generation, mostly reasoning (a mean of 81-111 tokens per step). Scaling the screenshot to 0.75 cut prompt tokens from 719 to 439 and the Q4 median step from 9.6 to 7.9 s, with no accuracy loss on these pages.
+- **Feel:** accurate but deliberate. Each action takes 8-10 s, so "log in for me" takes about 30 s. Fine for chores you hand off; too slow for anything that should feel interactive.
+- These tasks are easy. Long pages, scrolling, real login flows, multi-tab work and recovering from a wrong click are untested.
+- The six rows above ran the harness in a Linux environment with a headless Chromium 151 shell. This repo's README path uses Playwright 1.60.0's own headless Chromium on Windows, which is what the clean-clone check used.
 
 ### Speculative decoding (DSpark draft): leave it off
+
+<details>
+<summary>DSpark table and why it does not pay off here</summary>
 
 llama-server with vision loaded, 16K context, ub 256, 400 generated tokens on the two `text_decode.py` prompts with reasoning effort `none`, at temperature 0 and 1.0 (4 runs per row). These servers used `-lm none`.
 
@@ -339,36 +416,18 @@ llama-server with vision loaded, 16K context, ub 256, 400 generated tokens on th
 
 Across the DSpark rows above, 19-56% of drafted tokens were accepted (a mean accepted length of 1.8-2.9 tokens per verify step), but each verify step costs about as much as the tokens it saves: verifying 3-4 tokens through a 128-expert MoE reads several times more expert weights, and 12 of the 48 layer visits run on the CPU. With Q4 the drafter also pushes the card to 11.97 GB. The draft might pay off on a GPU where all the experts fit in VRAM.
 
-### Browser trial
-
-Server as in the recommended command, except that every row other than the `--cache-ram 0` row ran with llama-server's default `--cache-ram` (8,192 MiB). Times are per model step, end to end.
-
-| Run | Tasks | Scored steps correct | Steps | Median / mean / p90 step s | Prompt tok (mean) | Prompt ms | Gen tok | Gen ms |
-|---|---|---|---|---|---|---|---|---|
-| Q4 coords | 5/5 | 11/11 | 14 | 9.6 / 10.2 / 12.0 | 719 | 5,074 | 111 | 5,032 |
-| Q4 som | 5/5 | 10/10 | 12 | 8.6 / 10.0 / 12.3 | 857 | 5,734 | 88 | 4,069 |
-| Q4 coords, screenshot scaled to 960x600 | 5/5 | 11/11 | 14 | 7.9 / 8.6 / 9.6 | 439 | 3,400 | 111 | 5,047 |
-| Q4 coords, `--cache-ram 0` (4 tasks) | 4/4 | 10/10 | 13 | 9.6 / 10.4 / 12.1 | 723 | 5,316 | 108 | 5,018 |
-| IQ3 coords | 5/5 | 11/11 | 14 | 7.8 / 8.6 / 10.4 | 719 | 3,967 | 104 | 4,486 |
-| IQ3 som | 5/5 | 10/10 | 12 | 7.3 / 7.9 / 9.7 | 867 | 4,294 | 81 | 3,460 |
-
-- **Accuracy:** no wrong clicks. Pixel grounding was accurate even for small targets: a 13 px checkbox, a radio button, and the "Add to cart" button under the right mug. On live Wikipedia it typed into the search box and then clicked the right autocomplete entry.
-- **Waste:** it sometimes spends a step clicking a field before typing into it, even though `type` clicks and types at once. The newsletter task took 4 steps where 3 were enough.
-- **Latency:** about 45% of a step is the screenshot prefill (700-880 tokens at 1280x800, about 4-5 s) and about 50% is 70-110 reasoning tokens. Scaling the screenshot to 0.75 cut prompt tokens from 719 to 439 and the Q4 median step from 9.6 to 7.9 s, with no accuracy loss on these pages.
-- **Feel:** accurate but deliberate. Each action takes 8-10 s, so "log in for me" takes about 30 s. Fine for chores you hand off; too slow for anything that should feel interactive.
-- These tasks are easy. Long pages, scrolling, real login flows, multi-tab work and recovering from a wrong click are untested.
-- My trial ran the harness in a Linux environment with a headless Chromium 151 shell. This repo's README path uses Playwright 1.60.0's own headless Chromium on Windows, so page rendering may differ slightly.
+</details>
 
 ### What sets the speed
 
-1. **Loop-aware placement is the biggest win.** With the same 12 layers' experts on the CPU, keeping the core on the GPU instead of using `-ncmoe 12` gave IQ3_XXS tg 24.55 vs 18.25 tok/s (+35%) and pp 181 vs 107 (+70%). For Q4_K_XL the gap was 22.31 vs 18.65, and `-ncmoe 12` also cost 1.9 GB more VRAM, because it puts the 1 GB Q8_0 layers 20-23 on the GPU.
-2. **Op offload gives 2.7x prefill for free.** pp512 rose from 181 to 497 at the same peak VRAM.
-3. **Decode has a floor of about 23-25 tok/s.** The decode graph has 12,658 nodes per token across 48 layer visits. Moving 6 more expert layers to the GPU only bought +8% (26.6 vs 24.6) and does not fit alongside vision and 16K context.
-4. **Q4_K_XL vs IQ3_XXS:** Q4 is about 7% slower at decode and 9-23% slower at prefill, and uses about 0.9-1.9 GB more VRAM and about 2 GB more RAM.
+1. **Loop-aware placement is the biggest win.** Inkling 2 Mini stores 24 weight blocks, but layers 6-17 are a looped core that runs three times per token (48 layer visits). Experts kept on the GPU for those layers get used three times per token, so they are where VRAM pays off most. With the same 12 layers' experts on the CPU, keeping the core on the GPU instead of using `-ncmoe 12` gave IQ3_XXS tg 24.55 vs 18.25 tok/s (+34.5%) and pp 181 vs 107 (+70%). For Q4_K_XL the gap was 22.31 vs 18.65 (+19.6%), and `-ncmoe 12` also cost 1.9 GB more VRAM, because it puts the 1 GB Q8_0 layers 20-23 on the GPU.
+2. **Op offload gave 2.7x prefill at no VRAM cost.** IQ3_XXS pp512 rose from 181 to 497 at the same peak VRAM (short context; at 16K it needs the compute buffer described under the recommended command).
+3. **Decode tops out around 23-25 tok/s.** The decode graph has 12,658 nodes per token across 48 layer visits. Moving 6 more expert layers to the GPU only bought +8% (26.6 vs 24.6) and does not fit alongside vision and 16K context.
+4. **Q4_K_XL vs IQ3_XXS:** Q4 is about 6-7% slower at decode and 9-23% slower at prefill, and uses about 0.9-1.9 GB more VRAM and about 2 GB more RAM.
 
 ### Memory: two defaults this command overrides
 
-- **mmap stays on.** `-lm none` (no mmap) is 25-48% faster at prefill, but it puts the CPU-side experts in pinned, non-pageable host memory: 18-26 GB private per server. During my first browser trial that drove Windows down to 151-227 MB of available RAM (a second server had also been left running by mistake). Every later server run used mmap.
+- **mmap stays on.** `-lm none` (no mmap) is 25-48% faster at prefill in llama-bench, but it puts the CPU-side experts in pinned, non-pageable host memory: 18-26 GB private per server. During my first browser trial that drove Windows down to 151-227 MB of available RAM (a second server had also been left running by mistake). Every later server run used mmap.
 - **`--cache-ram 0`.** llama-server's `--cache-ram` defaults to 8,192 MiB of host prompt cache, and each screenshot request added an entry of about 500 MB. Q4 private memory climbed to 22.2 GB, and Windows dropped to 456 MB available. With `--cache-ram 0` private memory plateaued at 14.4 GB. Prompt reuse within the slot still works.
 
 ## About these numbers
@@ -376,12 +435,17 @@ Server as in the recommended command, except that every row other than the `--ca
 - **One PC:** RTX 3060 12 GB (NVIDIA driver 610.88), Ryzen 9 5900X (12 cores), 64 GB DDR4-3600, Windows 11. Windows had only 15-25 GB of RAM free during the runs because other software held the rest.
 - **Desktop in use:** a browser, chat apps and an animated wallpaper were running the whole time, and the desktop's VRAM share moved between 0.7 and 2.9 GB. Expect about ±5% noise. One early run read 12.7 tok/s where clean repeats read 24.6; I treated it as contention and left it out.
 - **One build that is still changing:** Unsloth llama.cpp b12568-mix-8eebad4 (upstream b12568). Upstream ggml-org llama.cpp #32669 ("apply .scale tensors automatically + fix correctness") and the competing looped-architecture PRs #32694 and #32695 were still open. Output quality and speed may change between builds.
-- **Early:** all numbers are from a single afternoon (2026-11-20) with few repetitions. Treat them as a starting point, not a benchmark.
-- **Not measured:** speed under WSL (the Linux prebuilt needs glibc 2.34 and my WSL distribution had 2.31), harder browser tasks, and `reasoning_effort: "none"` latency in the browser loop.
+- **Early:** the benchmark and trial numbers are from a single afternoon (2026-11-20) with few repetitions. Treat them as a starting point, not a benchmark.
+- **Clean clone:** a fresh clone, following only an earlier version of this README, ran on the same PC: build check, hash verification, the `iq3` server, the text speed check (22.01 / 21.89 tok/s), the browser harness on the four local pages and the quick IQ3 bench (pp512 392.7, tg128 23.1, within 1.2-3.2% of the table). It used IQ3_XXS because Windows had less than 16 GB free at the time, and the model files were already downloaded. The default Q4_K_XL path from empty folders has not been re-run end to end.
+- **Model size:** the model card lists 26.2B parameters, 3.4B active per pass; because the 12 core layers run three times, that is about 5.4B effective active parameters per token. llama-bench reports 26.07B for the Q4_K_XL file.
+- **Not measured:** speed under WSL (the Linux prebuilt needs glibc 2.34 and my WSL distribution had 2.31), other 12 GB cards, harder browser tasks, and `reasoning_effort: "none"` latency in the browser loop.
 
 ## Running from a WSL shell
 
-The server is a native Windows program, and the steps above are written for Windows PowerShell. You can drive them from a WSL terminal instead:
+The server is a native Windows program, and the steps above are written for Windows PowerShell. You can drive them from a WSL terminal instead.
+
+<details>
+<summary>WSL instructions</summary>
 
 - Windows programs are not always on the WSL `PATH`, so call them by full path. Set these once per terminal:
 
@@ -441,6 +505,22 @@ A background server does not stop when you close the terminal. Stop it with `/mn
 ```
 
 With WSL2's default NAT networking, `127.0.0.1` inside WSL is WSL itself, not Windows, so WSL programs cannot reach the server at that address. That is why the steps above use Windows Python and Windows `curl.exe`. `text_decode.py` can also run under WSL's own Python with Windows `curl.exe` as a bridge: `python3 bench/text_decode.py --curl-exe "$CURL"` (standard library only). `harness.py` accepts the same flag, but under WSL's Python it also needs Playwright and its browser installed in WSL, which this README does not cover.
+
+</details>
+
+## What's in this repo
+
+| File | What it does |
+|---|---|
+| `run-inkling-mini.cmd` | Starts llama-server with the recommended settings (Q4_K_XL by default, `iq3` for the smaller quant). |
+| `config.cmd` | The model folder, llama.cpp folder and port. Edit it if your files live somewhere else. |
+| `verify-downloads.ps1` | Checks downloaded files against `SHA256SUMS` with `Get-FileHash`. |
+| `bench/bench.cmd` | llama-bench runs that reproduce the placement rows of the speed table. |
+| `bench/text_decode.py` | Sends two fixed text prompts to the running server and prints its decode speed. Standard library only. |
+| `browser/harness.py` | Browser-use trial: screenshot, then model, then one JSON action, then execute. Four local test pages plus one public Wikipedia task. |
+| `browser/summarize.py` | Turns harness runs into the results table. |
+| `browser/pages/` | The four local test pages (sign-in form, mug shop, settings, newsletter). |
+| `docs/` | The image at the top: a screenshot from the Q4_K_XL coords run with the model's logged click marked. |
 
 ## Credits
 
