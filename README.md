@@ -107,7 +107,7 @@ OK        app-b12568-mix-8eebad4-windows-x64-cuda13-newer.zip
 OK        cudart-llama-bin-win-cuda-13.5-x64.zip
 ```
 
-If a zip shows `MISMATCH`, do not unzip it or run anything from it: delete that zip and download it again.
+If a zip shows `MISMATCH`, do not unzip it or run anything from it: delete that zip, download it again, and rerun the check until both zips show `OK`.
 
 Unzip both into the same folder:
 
