@@ -19,7 +19,7 @@ With the default Q4_K_XL setup on my PC:
 | | |
 |---|---|
 | **OS** | Windows 11 x64 (tested). Windows 10 should work but is untested. |
-| **GPU** | NVIDIA, 12 GB VRAM, with a driver new enough for CUDA 13: run `nvidia-smi` and look for `CUDA Version: 13.0` or higher in its header. Only one RTX 3060 12 GB is tested. If you try another 12 GB card, please post your numbers in an issue. |
+| **GPU** | NVIDIA, 12 GB VRAM, with a driver new enough for CUDA 13: run `nvidia-smi` and check that the CUDA version in its header is 13.0 or higher (driver 610.88 shows `CUDA UMD Version: 13.3`). Only one RTX 3060 12 GB is tested. If you try another 12 GB card, please post your numbers in an issue. |
 | **RAM** | The Q4_K_XL server used about 14 GB of host RAM, the smaller IQ3_XXS about 2 GB less. The launcher warns below 15,000 MB free (13,000 MB for IQ3). |
 | **Download** | About 19 GB for Q4_K_XL, or about 13 GB with IQ3_XXS instead. Both include the vision projector and the two llama.cpp zips. |
 | **Runtime** | Unsloth's llama.cpp prebuilt b12568-mix-8eebad4, which has the looped-layer support this model needs. LM Studio, Ollama, Linux and Mac are not covered here. The `-ot` placement in the [recommended command](#the-recommended-command) is the part that should carry over to other llama.cpp builds with looped-layer support. |
@@ -67,7 +67,7 @@ Use the Unsloth llama.cpp prebuilt **b12568-mix-8eebad4**, Windows x64, CUDA 13 
 
 That zip has no CUDA runtime DLLs, so you also need `cudart-llama-bin-win-cuda-13.5-x64.zip` from upstream ggml-org llama.cpp release b12540.
 
-First check that your driver supports CUDA 13 (the header should show `CUDA Version: 13.0` or higher):
+First check that your driver supports CUDA 13. The CUDA version in the header must be 13.0 or higher; with driver 610.88 the top line ends in `CUDA UMD Version: 13.3`:
 
 ```powershell
 nvidia-smi
