@@ -1,0 +1,8 @@
+<!doctype html><html><head><meta charset="utf-8"><title>MugMart</title><style>
+body{font-family:Arial;margin:0;background:#fafafa}header{background:#6a1b9a;color:#fff;padding:14px 24px;font-size:20px;display:flex;justify-content:space-between}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;padding:24px}.item{background:#fff;border:1px solid #ddd;border-radius:6px;padding:14px}
+.sw{height:90px;border-radius:4px;margin-bottom:8px}.price{font-weight:bold;font-size:18px}button{margin-top:8px;padding:8px 12px;background:#ff8f00;border:0;border-radius:4px;color:#fff;font-size:14px}</style></head>
+<body><header><span>MugMart</span><span id="cart">Cart (0)</span></header><div class="grid" id="g"></div>
+<script>const items=[["Classic Mug","red",12.99],["Ocean Mug","blue",15.49],["Forest Mug","green",9.99],["Sky Mug","blue",8.75],["Sunset Mug","orange",11.25],["Midnight Mug","blue",19.00]];
+let cart=[];items.forEach((it,i)=>{g.insertAdjacentHTML('beforeend',`<div class=item><div class=sw style="background:${it[1]}"></div><div>${it[0]}</div><div>Color: ${it[1]}</div><div class=price>$${it[2].toFixed(2)}</div><button data-target="add-${i}" onclick="add(${i})">Add to cart</button></div>`)});
+function add(i){cart.push(i);document.getElementById('cart').textContent='Cart ('+cart.length+')';document.body.dataset.cart=cart.join(',')}</script></body></html>

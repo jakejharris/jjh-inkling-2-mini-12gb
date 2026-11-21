@@ -1,0 +1,10 @@
+<!doctype html><html><head><meta charset="utf-8"><title>NoteHub</title><style>
+body{font-family:Arial;margin:0;display:flex;height:100vh}nav{width:200px;background:#263238;color:#fff;padding-top:20px}
+nav a{display:block;color:#cfd8dc;padding:12px 20px;text-decoration:none;font-size:16px}
+main{flex:1;padding:30px}.row{display:flex;align-items:center;gap:12px;margin:16px 0;font-size:16px}button{padding:10px 18px;font-size:15px;background:#1565c0;color:#fff;border:0;border-radius:4px}</style></head>
+<body><nav><a href="#" data-target="nav-home" onclick="show('home')">Home</a><a href="#" data-target="nav-notes" onclick="show('notes')">My Notes</a><a href="#" data-target="nav-shared" onclick="show('shared')">Shared</a><a href="#" data-target="nav-settings" onclick="show('settings')">Settings</a><a href="#" data-target="nav-help" onclick="show('help')">Help</a></nav>
+<main id="m"></main><script>
+const views={home:'<h1>Home</h1><p>Welcome back. You have 3 new notes.</p>',notes:'<h1>My Notes</h1><ul><li>Groceries</li><li>Trip plan</li></ul>',shared:'<h1>Shared</h1><p>Nothing shared yet.</p>',help:'<h1>Help</h1><p>Contact support@notehub.test</p>',
+settings:'<h1>Settings</h1><div class=row><input type=checkbox id=notif data-target="notif" checked><label for=notif>Email notifications</label></div><div class=row><input type=checkbox id=dark data-target="dark"><label for=dark>Dark mode</label></div><div class=row><input type=checkbox id=beta data-target="beta"><label for=beta>Beta features</label></div><button data-target="save" onclick="save()">Save changes</button><p id=st></p>'};
+function show(v){m.innerHTML=views[v];document.body.dataset.view=v}
+function save(){document.body.dataset.saved=JSON.stringify({dark:dark.checked,notif:notif.checked,beta:beta.checked});st.textContent='Saved.'}show('home')</script></body></html>

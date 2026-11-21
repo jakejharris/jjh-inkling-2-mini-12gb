@@ -1,0 +1,11 @@
+<!doctype html><html><head><meta charset="utf-8"><title>The Daily Byte</title><style>
+body{font-family:Georgia;margin:0;background:#fff}header{padding:18px 30px;border-bottom:2px solid #000;font-size:28px}
+article{width:560px;float:left;padding:20px 30px;color:#444;line-height:1.5}aside{float:left;width:340px;margin:20px;padding:20px;background:#fff8e1;border:1px solid #ffcc80}
+input[type=email]{width:100%;padding:8px;font-size:15px;box-sizing:border-box}.opt{margin:8px 0}button{margin-top:12px;padding:10px 16px;background:#000;color:#fff;border:0;font-size:15px}</style></head>
+<body><header>The Daily Byte</header><article><h2>Chips get smaller again</h2><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus lacinia odio vitae vestibulum vestibulum. Cras venenatis euismod malesuada. Nullam ac erat ante. Integer vitae magna vel lacus pretium luctus.</p><p>Donec ullamcorper nulla non metus auctor fringilla. Maecenas faucibus mollis interdum. Sed posuere consectetur est at lobortis.</p></article>
+<aside id="a"><h3>Get the newsletter</h3><input type="email" id="e" placeholder="you@example.com" data-target="email">
+<div class="opt"><input type="radio" name="f" id="fd" value="daily" data-target="daily"><label for="fd">Daily</label></div>
+<div class="opt"><input type="radio" name="f" id="fw" value="weekly" data-target="weekly"><label for="fw">Weekly</label></div>
+<div class="opt"><input type="radio" name="f" id="fm" value="monthly" data-target="monthly"><label for="fm">Monthly</label></div>
+<button data-target="subscribe" onclick="sub()">Subscribe</button></aside>
+<script>function sub(){const f=document.querySelector('input[name=f]:checked');document.body.dataset.sub=JSON.stringify({email:e.value,freq:f?f.value:null});a.innerHTML='<h3>Thanks!</h3><p>Check your inbox.</p>'}</script></body></html>

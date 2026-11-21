@@ -1,0 +1,11 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Acme Portal</title><style>
+body{font-family:Arial;background:#eef2f7;margin:0}header{background:#1f3a5f;color:#fff;padding:14px 24px;font-size:20px}
+.card{width:380px;margin:80px auto;background:#fff;padding:28px;border-radius:8px;box-shadow:0 2px 8px #0002}
+label{display:block;margin:14px 0 4px;color:#333}input{width:100%;padding:10px;font-size:16px;box-sizing:border-box;border:1px solid #aab}
+button{margin-top:20px;width:100%;padding:12px;font-size:16px;background:#2e7d32;color:#fff;border:0;border-radius:4px}
+a{display:block;margin-top:12px;color:#1f3a5f;font-size:14px}</style></head><body><header>Acme Portal</header>
+<div class="card" id="c"><h2>Sign in</h2><label for="u">Username</label><input id="u" data-target="username">
+<label for="p">Password</label><input id="p" type="password" data-target="password">
+<button id="b" data-target="login" onclick="go()">Sign in</button><a href="#" data-target="forgot">Forgot password?</a>
+<a href="#" data-target="register">Create an account</a></div>
+<script>function go(){if(u.value.trim()=='demo'&&p.value=='hunter2'){c.innerHTML='<h2 id=ok>Welcome, demo!</h2><p>You are signed in.</p>';document.body.dataset.done='1'}else{c.insertAdjacentHTML('beforeend','<p style=color:red>Invalid credentials</p>')}}</script></body></html>
