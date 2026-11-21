@@ -1,18 +1,29 @@
 # Inkling 2 Mini on a 12 GB RTX 3060
 
-**Inkling 2 Mini** is Thinking Machines Lab's 26B mixture-of-experts model with vision input (Apache 2.0). Its model card recommends 32 GB or more of VRAM. This repo runs it on a **12 GB RTX 3060** with llama.cpp on Windows: a launcher, benchmark scripts, and a small browser-agent harness that drives a headless Chromium from screenshots.
+**The model:** Inkling 2 Mini, Thinking Machines Lab's 26B mixture-of-experts model with vision input (Apache 2.0). Its model card recommends 32 GB or more of VRAM. This repo runs it on a **12 GB RTX 3060** with llama.cpp on Windows.
 
-With the default Q4_K_XL setup on my PC:
+**The recipe:**
 
-- **About 22 tok/s** decode and **about 300 tok/s** prompt processing.
-- **About 10 GB of VRAM** and **about 14 GB of system RAM**, with vision loaded and 16K context.
-- **Browser trial:** 5 easy tasks, each run 5 ways, with no wrong clicks. In the 3 pixel-only runs the model saw nothing but the screenshot and finished 15 of 15 tasks. Model time per step was a median of 7.3-9.6 s (8.9-12.4 s in a later clean-clone run on Windows).
+- **llama.cpp:** Unsloth's prebuilt b12568-mix-8eebad4 (Windows x64, CUDA 13), which has the looped-layer support this model needs.
+- **Quant:** Unsloth's `Inkling-2-Mini-UD-Q4_K_XL.gguf`, plus `mmproj-F16.gguf` for vision.
+- **Expert placement:** the experts of layers 0-5 and 18-23 on the CPU, everything else on the GPU:
 
-<p align="center"><img src="docs/browser-trial-shop.png" width="600" alt="The model looks at a shop page screenshot and clicks Add to cart under the cheapest blue mug, Sky Mug at $8.75, in one step"></p>
+  ```
+  -ngl 99 -ot "blk\.([0-5]|1[89]|2[0-3])\.ffn_.*_exps=CPU"
+  ```
+
+- **Full command and flags:** [The recommended command](#the-recommended-command).
+
+**The stats**, with the default Q4_K_XL setup on my PC:
+
+- **22.5 tok/s** decode and **306 tok/s** prompt processing (llama-bench tg128 and pp512 with the default placement and mmap, see [At a glance](#at-a-glance)).
+- **16K context with vision on**, using **about 10 GB of VRAM** and **about 14 GB of system RAM**.
+
+> **These are early numbers from one PC**, measured on 2026-11-20 with the desktop in use, on one llama.cpp build that is still changing. See [About these numbers](#about-these-numbers) before you compare them with anything.
 
 **Why it fits:** the middle 12 layers (6-17) run three times per token, so the launcher gives *their* experts the VRAM and leaves the experts of the other 12 layers on the CPU. With the same number of expert layers on the CPU, that decoded about 20-35% faster than llama.cpp's usual `-ncmoe 12` split.
 
-> **These are early numbers from one PC**, measured on 2026-11-20 with the desktop in use, on one llama.cpp build that is still changing. See [About these numbers](#about-these-numbers) before you compare them with anything.
+Also in the repo: a launcher, download hashes, benchmark scripts to reproduce the numbers, and a small [browser-agent trial](#browser-trial).
 
 ## Is this for you?
 
@@ -376,6 +387,10 @@ Decode falls only 10-15% from short context to 32K. At 32K with op offload the c
 
 ### Browser trial
 
+**In short:** 5 easy tasks, each run 5 ways, with no wrong clicks. In the 3 pixel-only runs the model saw nothing but the screenshot and finished 15 of 15 tasks. Model time per step was a median of 7.3-9.6 s (8.9-12.4 s in a later clean-clone run on Windows).
+
+<p align="center"><img src="docs/browser-trial-shop.png" width="600" alt="The model looks at a shop page screenshot and clicks Add to cart under the cheapest blue mug, Sky Mug at $8.75, in one step"></p>
+
 Server as in the recommended command, except that every row other than the `--cache-ram 0` row ran with llama-server's default `--cache-ram` (8,192 MiB). Times are the model request per step (screenshot prefill plus generation).
 
 | Run | Tasks | Scored steps correct | Steps | Median / mean / p90 step s | Prompt tok (mean) | Prompt ms | Gen tok | Gen ms |
@@ -520,7 +535,7 @@ With WSL2's default NAT networking, `127.0.0.1` inside WSL is WSL itself, not Wi
 | `browser/harness.py` | Browser-use trial: screenshot, then model, then one JSON action, then execute. Four local test pages plus one public Wikipedia task. |
 | `browser/summarize.py` | Turns harness runs into the results table. |
 | `browser/pages/` | The four local test pages (sign-in form, mug shop, settings, newsletter). |
-| `docs/` | The image at the top: a screenshot from the Q4_K_XL coords run with the model's logged click marked. |
+| `docs/` | The image in [Browser trial](#browser-trial): a screenshot from the Q4_K_XL coords run with the model's logged click marked. |
 
 ## Credits
 
