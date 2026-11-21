@@ -2,17 +2,11 @@
 
 **The model:** Inkling 2 Mini, Thinking Machines Lab's 26B mixture-of-experts model with vision input (Apache 2.0). Its model card recommends 32 GB or more of VRAM. This repo runs it on a **12 GB RTX 3060** with llama.cpp on Windows.
 
-**The recipe:**
+**The recipe:** llama.cpp (Unsloth's prebuilt b12568-mix-8eebad4, CUDA 13, which has the looped-layer support this model needs), Unsloth's `UD-Q4_K_XL` quant plus `mmproj-F16` for vision, and the experts of layers 0-5 and 18-23 on the CPU, everything else on the GPU ([full command](#the-recommended-command)):
 
-- **llama.cpp:** Unsloth's prebuilt b12568-mix-8eebad4 (Windows x64, CUDA 13), which has the looped-layer support this model needs.
-- **Quant:** Unsloth's `Inkling-2-Mini-UD-Q4_K_XL.gguf`, plus `mmproj-F16.gguf` for vision.
-- **Expert placement:** the experts of layers 0-5 and 18-23 on the CPU, everything else on the GPU:
-
-  ```
-  -ngl 99 -ot "blk\.([0-5]|1[89]|2[0-3])\.ffn_.*_exps=CPU"
-  ```
-
-- **Full command and flags:** [The recommended command](#the-recommended-command).
+```
+-ngl 99 -ot "blk\.([0-5]|1[89]|2[0-3])\.ffn_.*_exps=CPU"
+```
 
 **The stats**, with the default Q4_K_XL setup on my PC:
 
