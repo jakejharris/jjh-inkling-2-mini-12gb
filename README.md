@@ -2,13 +2,13 @@
 
 **Inkling 2 Mini** is Thinking Machines Lab's 26B mixture-of-experts model with vision input (Apache 2.0). Its model card recommends 32 GB or more of VRAM. This repo runs it on a **12 GB RTX 3060** with llama.cpp on Windows: a launcher, benchmark scripts, and a small browser-agent harness that drives a headless Chromium from screenshots.
 
-![The model looks at a shop page screenshot and clicks "Add to cart" under the cheapest blue mug](docs/browser-trial-shop.png)
-
 With the default Q4_K_XL setup on my PC:
 
 - **About 22 tok/s** decode and **about 300 tok/s** prompt processing.
 - **About 10 GB of VRAM** and **about 14 GB of system RAM**, with vision loaded and 16K context.
 - **Browser trial:** 5 easy tasks, each run 5 ways, with no wrong clicks. In the 3 pixel-only runs the model saw nothing but the screenshot and finished 15 of 15 tasks. Model time per step was a median of 7.3-9.6 s (8.9-12.4 s in a later clean-clone run on Windows).
+
+<p align="center"><img src="docs/browser-trial-shop.png" width="600" alt="The model looks at a shop page screenshot and clicks Add to cart under the cheapest blue mug, Sky Mug at $8.75, in one step"></p>
 
 **Why it fits:** the middle 12 layers (6-17) run three times per token, so the launcher gives *their* experts the VRAM and leaves the experts of the other 12 layers on the CPU. With the same number of expert layers on the CPU, that decoded about 20-35% faster than llama.cpp's usual `-ncmoe 12` split.
 
@@ -16,13 +16,11 @@ With the default Q4_K_XL setup on my PC:
 
 ## Is this for you?
 
-| | |
-|---|---|
-| **OS** | Windows 11 x64 (tested). Windows 10 should work but is untested. |
-| **GPU** | NVIDIA, 12 GB VRAM, with a driver new enough for CUDA 13: run `nvidia-smi` and check that the CUDA version in its header is 13.0 or higher (driver 610.88 shows `CUDA UMD Version: 13.3`). Only one RTX 3060 12 GB is tested. If you try another 12 GB card, please post your numbers in an issue. |
-| **RAM** | The Q4_K_XL server used about 14 GB of host RAM, the smaller IQ3_XXS about 2 GB less. The launcher warns below 15,000 MB free (13,000 MB for IQ3). |
-| **Download** | About 19 GB for Q4_K_XL, or about 13 GB with IQ3_XXS instead. Both include the vision projector and the two llama.cpp zips. |
-| **Runtime** | Unsloth's llama.cpp prebuilt b12568-mix-8eebad4, which has the looped-layer support this model needs. LM Studio, Ollama, Linux and Mac are not covered here. The `-ot` placement in the [recommended command](#the-recommended-command) is the part that should carry over to other llama.cpp builds with looped-layer support. |
+- **Windows 11** x64 (tested). Windows 10 should work but is untested.
+- **An NVIDIA GPU with 12 GB** and a driver new enough for CUDA 13 (check with `nvidia-smi`, see [Step 2](#step-2-get-the-llamacpp-build)). Only one RTX 3060 12 GB is tested. If you try another 12 GB card, please post your numbers in an issue.
+- **RAM:** the Q4_K_XL server used about 14 GB of host RAM, the smaller IQ3_XXS about 2 GB less.
+- **Download:** about 19 GB for Q4_K_XL, or about 13 GB with IQ3_XXS instead (model, vision projector and the two llama.cpp zips).
+- **Runtime:** Unsloth's llama.cpp prebuilt b12568-mix-8eebad4, which has the looped-layer support this model needs. LM Studio, Ollama, Linux and Mac are not covered here. The `-ot` placement in the [recommended command](#the-recommended-command) is the part that should carry over to other llama.cpp builds with looped-layer support.
 
 ## Quick start
 
@@ -40,7 +38,7 @@ Then, optionally, [check the speed](#step-5-check-text-speed), [run the browser 
 - Every command below is for **PowerShell**. In PowerShell, always type `curl.exe`, not `curl` (in Windows PowerShell, `curl` is an alias for a different command). The `.cmd` scripts also run from a plain cmd window. If you work from WSL, read [Running from a WSL shell](#running-from-a-wsl-shell) first.
 - You need `git`, and Python 3.9 or newer from python.org for the speed check and the browser harness. `curl.exe` and `tar.exe` ship with Windows 10 and 11.
 - Disk: about 18.3 GB for the Q4_K_XL model plus the vision projector, 11.7 GB more for the optional IQ3_XXS model, about 0.7 GB for the two llama.cpp zips and 0.9 GB once they are unpacked (you can delete the zips afterwards), and a few hundred MB for the browser trial's Python packages and headless Chromium.
-- Free RAM: if only about 10-14 GB is free, start the smaller model with `.\run-inkling-mini.cmd iq3` instead of the default.
+- Free RAM: the launcher warns below 15,000 MB free (13,000 MB for IQ3). If only about 10-14 GB is free, start the smaller model with `.\run-inkling-mini.cmd iq3` instead of the default.
 - After Step 1, every command runs from the repo folder. Commands that touch the model or llama.cpp folders use full paths, so you never need to `cd` away from the repo.
 
 The commands use these default folders. You can use others; if you do, change the paths in the commands and in `config.cmd`.
